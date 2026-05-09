@@ -1,15 +1,12 @@
 """
 analyzer.py
 Core AI analysis engine.
-Uses the Anthropic API (Claude) to map policy text → NIST/ISO/SOC2/GDPR/HIPAA controls
-and surface compliance gaps with remediation guidance.
+Uses the Anthropic API (Claude) to map policy text to compliance frameworks.
 """
 
 import json
 import os
 import re
-from typing import Optional
-import anthropic
 
 # ── Framework control registries ──────────────────────────────────────────────
 FRAMEWORKS = {
@@ -67,7 +64,7 @@ FRAMEWORKS = {
         "A.5.30": "ICT readiness for business continuity",
     },
     "SOC 2 Type II": {
-        "CC1.1": "COSO Principle 1 – Integrity & ethical values",
+        "CC1.1": "COSO Principle 1 - Integrity and ethical values",
         "CC1.2": "Board independence and oversight",
         "CC2.1": "Information quality for internal control",
         "CC2.2": "External communication of objectives",
@@ -76,8 +73,8 @@ FRAMEWORKS = {
         "CC5.1": "Control activities selection",
         "CC6.1": "Logical access security measures",
         "CC6.2": "New user access provisioned with approval",
-        "CC6.3": "Access removed/modified timely",
-        "CC6.6": "Logical access security – external threats",
+        "CC6.3": "Access removed or modified timely",
+        "CC6.6": "Logical access security - external threats",
         "CC6.7": "Data transmission restricted to authorized parties",
         "CC7.1": "Vulnerability detection tooling",
         "CC7.2": "Infrastructure monitored for anomalies",
@@ -89,7 +86,7 @@ FRAMEWORKS = {
         "P1.1":  "Privacy notice",
     },
     "GDPR": {
-        "Art.5":  "Principles of processing (lawfulness, fairness, transparency)",
+        "Art.5":  "Principles of processing",
         "Art.6":  "Lawful basis for processing",
         "Art.7":  "Conditions for consent",
         "Art.12": "Transparent information to data subjects",
@@ -97,46 +94,45 @@ FRAMEWORKS = {
         "Art.17": "Right to erasure",
         "Art.20": "Right to data portability",
         "Art.25": "Data protection by design and by default",
-        "Art.28": "Processor agreements (DPA)",
+        "Art.28": "Processor agreements",
         "Art.30": "Records of processing activities",
         "Art.32": "Security of processing",
-        "Art.33": "Breach notification to supervisory authority (72hr)",
+        "Art.33": "Breach notification to supervisory authority",
         "Art.34": "Breach notification to data subjects",
-        "Art.35": "Data protection impact assessment (DPIA)",
+        "Art.35": "Data protection impact assessment",
         "Art.37": "Data Protection Officer designation",
     },
     "HIPAA": {
-        "164.306": "Security standards general requirements",
-        "164.308a1": "Security management process",
-        "164.308a3": "Workforce security",
-        "164.308a4": "Information access management",
-        "164.308a5": "Security awareness and training",
-        "164.308a6": "Security incident procedures",
-        "164.308a7": "Contingency plan",
-        "164.310a1": "Facility access controls",
-        "164.310d1": "Device and media controls",
-        "164.312a1": "Access control",
-        "164.312a2": "Audit controls",
-        "164.312b":  "Person or entity authentication",
-        "164.312c1": "Integrity",
-        "164.312e1": "Transmission security",
-        "164.514b":  "De-identification of PHI",
-        "164.524":   "Access of individuals to PHI",
+        "164.306":    "Security standards general requirements",
+        "164.308a1":  "Security management process",
+        "164.308a3":  "Workforce security",
+        "164.308a4":  "Information access management",
+        "164.308a5":  "Security awareness and training",
+        "164.308a6":  "Security incident procedures",
+        "164.308a7":  "Contingency plan",
+        "164.310a1":  "Facility access controls",
+        "164.310d1":  "Device and media controls",
+        "164.312a1":  "Access control",
+        "164.312a2":  "Audit controls",
+        "164.312b":   "Person or entity authentication",
+        "164.312c1":  "Integrity",
+        "164.312e1":  "Transmission security",
+        "164.514b":   "De-identification of PHI",
+        "164.524":    "Access of individuals to PHI",
     },
 }
 
-
-# ── Prompts ───────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are a senior GRC (Governance, Risk & Compliance) analyst and information security expert.
 Your task is to analyze security/privacy policy documents and produce structured compliance gap analyses.
 You MUST return ONLY valid JSON — no markdown, no preamble, no explanations outside the JSON structure.
 Be thorough, specific, and actionable. Base your analysis solely on the policy text provided."""
 
-def build_analysis_prompt(policy_text: str, frameworks: list[str], depth: str, controls: dict) -> str:
+
+def build_analysis_prompt(policy_text, frameworks, depth, controls):
     depth_instruction = {
         "Quick Scan": "Focus on the most critical gaps only (top 5-8). Be concise.",
         "Standard":   "Provide a balanced analysis covering major gaps (8-15 items).",
-        "Deep Dive":  "Be exhaustive — cover all gaps including minor ones (15-25 items).",
+        "Deep Dive":  "Be exhaustive - cover all gaps including minor ones (15-25 items).",
     }.get(depth, "Standard")
 
     controls_json = json.dumps(controls, indent=2)
@@ -175,7 +171,7 @@ Return a JSON object with EXACTLY this structure:
       "control_name": "<name>",
       "framework": "<framework>",
       "status": "<Covered|Partial|Missing>",
-      "evidence": "<brief note on what was or wasn't found, max 15 words>"
+      "evidence": "<brief note on what was or was not found, max 15 words>"
     }}
   ],
   "remediation_plan": [
@@ -194,24 +190,34 @@ Sort gaps by severity (Critical first). Sort remediation_plan by impact/effort r
 Only include controls from the selected frameworks in the coverage_matrix."""
 
 
-# ── Analyzer class ────────────────────────────────────────────────────────────
 class ComplianceAnalyzer:
     def __init__(self):
-        self.client = anthropic.Anthropic(
-            api_key=os.environ.get("ANTHROPIC_API_KEY", "")
-        )
+        # Lazy import — only load anthropic when the class is actually used
+        try:
+            import anthropic
+            self.client = anthropic.Anthropic(
+                api_key=os.environ.get("ANTHROPIC_API_KEY", "")
+            )
+        except ImportError:
+            self.client = None
 
-    def _build_controls_subset(self, frameworks: list[str]) -> dict:
-        """Return only the controls for the selected frameworks."""
+    def _build_controls_subset(self, frameworks):
         result = {}
         for fw in frameworks:
             if fw in FRAMEWORKS:
                 result[fw] = FRAMEWORKS[fw]
         return result
 
-    def analyze(self, policy_text: str, frameworks: list[str], depth: str) -> dict:
+    def analyze(self, policy_text, frameworks, depth):
+        if self.client is None:
+            return self._fallback_result(
+                frameworks,
+                {},
+                "anthropic package not installed. Add 'anthropic' to requirements.txt",
+            )
+
         controls = self._build_controls_subset(frameworks)
-        prompt   = build_analysis_prompt(policy_text, frameworks, depth, controls)
+        prompt = build_analysis_prompt(policy_text, frameworks, depth, controls)
 
         try:
             response = self.client.messages.create(
@@ -222,8 +228,6 @@ class ComplianceAnalyzer:
             )
 
             raw = response.content[0].text.strip()
-
-            # Strip markdown fences if present
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
 
@@ -234,9 +238,8 @@ class ComplianceAnalyzer:
         except Exception as e:
             return self._fallback_result(frameworks, controls, str(e))
 
-    def _fallback_result(self, frameworks: list[str], controls: dict, error: str) -> dict:
-        """Return a minimal result if the API call fails."""
-        total = sum(len(v) for v in controls.values())
+    def _fallback_result(self, frameworks, controls, error):
+        total = sum(len(v) for v in controls.values()) if controls else 0
         return {
             "overall_score": 0,
             "total_controls": total,
@@ -245,10 +248,10 @@ class ComplianceAnalyzer:
             "gaps": [{
                 "control_id": "ERR-001",
                 "framework": "System",
-                "title": "Analysis failed — check API key",
+                "title": "Analysis failed - check API key",
                 "severity": "Critical",
                 "detail": f"The AI analysis could not complete. Error: {error[:200]}",
-                "recommendation": "Ensure ANTHROPIC_API_KEY is set and valid. Check your network connection.",
+                "recommendation": "Ensure ANTHROPIC_API_KEY is set in Streamlit secrets and anthropic is in requirements.txt",
             }],
             "coverage_matrix": [],
             "remediation_plan": [],
