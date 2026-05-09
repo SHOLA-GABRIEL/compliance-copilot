@@ -1,0 +1,32 @@
+# Environment variables - NEVER commit these
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Uploaded files (temp)
+uploads/
+tmp/
