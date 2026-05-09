@@ -510,8 +510,11 @@ with tab3:
 
             with st.expander(f"**{i}. {item.get('action','Action')}**"):
                 c1, c2, c3 = st.columns(3)
-                c1.markdown(f"**Effort:** <span style='color:{effort_colors.get(effort,\"#fff\")}'>{effort}</span>", unsafe_allow_html=True)
-                c2.markdown(f"**Impact:** <span style='color:{impact_colors.get(impact,\"#fff\")}'>{impact}</span>", unsafe_allow_html=True)
+                effort_col = effort_colors.get(effort, "#fff")
+impact_col = impact_colors.get(impact, "#fff")
+
+c1.markdown(f"**Effort:** <span style='color:{effort_col}'>{effort}</span>", unsafe_allow_html=True)
+c2.markdown(f"**Impact:** <span style='color:{impact_col}'>{impact}</span>", unsafe_allow_html=True)
                 c3.markdown(f"**Timeline:** {item.get('timeline','TBD')}")
                 st.markdown(item.get("detail", ""))
                 if item.get("controls_addressed"):
